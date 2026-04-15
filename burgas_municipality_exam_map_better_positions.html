@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Община Бургас – училища с НВО БЕЛ 7</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: Inter, Arial, sans-serif; color:#1f2937; background:#f8fafc; }
+    body { display:grid; grid-template-columns: 380px 1fr; }
+    #sidebar { padding: 18px 16px; overflow-y:auto; border-right:1px solid #e5e7eb; background:white; }
+    #map { height:100vh; width:100%; }
+    h1 { font-size:20px; margin:0 0 6px 0; }
+    .sub { font-size:13px; color:#4b5563; margin-bottom:12px; line-height:1.45; }
+    .note { font-size:12px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:10px 12px; margin-bottom:12px; line-height:1.45; }
+    .panel { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:12px; }
+    label { font-size:12px; font-weight:600; display:block; margin-bottom:6px; color:#374151; }
+    input, select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #d1d5db; box-sizing:border-box; background:#fff; margin-bottom:10px; font-size:14px; }
+    .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0; }
+    .stat { border-radius:12px; background:#f3f4f6; padding:10px; }
+    .stat .k { font-size:11px; color:#6b7280; margin-bottom:4px; text-transform:uppercase; }
+    .stat .v { font-size:20px; font-weight:700; color:#111827; }
+    .legend-item { display:flex; align-items:center; gap:8px; font-size:12px; color:#4b5563; margin-bottom:6px; }
+    .dot { width:12px; height:12px; border-radius:999px; display:inline-block; border:1px solid rgba(0,0,0,.18); }
+    .results { margin-top:14px; }
+    .result-item { padding:10px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px; background:#fafafa; cursor:pointer; }
+    .result-item:hover { background:#f3f4f6; }
+    .result-title { font-weight:600; font-size:14px; margin-bottom:4px; }
+    .result-meta, .muted { font-size:12px; color:#6b7280; }
+    .leaflet-popup-content { min-width:275px; max-width:330px; font-size:13px; line-height:1.4; }
+    .popup-title { font-weight:700; font-size:15px; margin-bottom:6px; }
+    .popup-section { margin-top:10px; }
+    .popup-section-title { font-weight:600; margin-bottom:4px; color:#111827; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; font-size:11px; margin-right:6px; margin-bottom:6px; }
+    button { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #d1d5db; background:#f9fafb; cursor:pointer; font-size:14px; }
+    @media (max-width:960px) { body { grid-template-columns:1fr; grid-template-rows:auto 70vh; } #sidebar { border-right:none; border-bottom:1px solid #e5e7eb; } #map { height:70vh; } }
+  </style>
+</head>
+<body>
+  <aside id="sidebar">
+    <h1>Община Бургас</h1>
+    <div class="sub">На картата са показани само училищата в <strong>община Бургас</strong>, които имат стойност в колоната <strong>„Общо точки“</strong> за НВО БЕЛ 7. клас.</div>
+    <div class="note">Тази версия е по-точна от предишната: училищата вече са поставени по квартали и населени места в общината, а не просто разпределени из цялата област. Все още не е геокодиране по точен адрес, а <strong>квартално/населено място ниво</strong>.</div>
+
+    <div class="panel">
+      <label for="searchInput">Търсене по име</label>
+      <input id="searchInput" type="text" placeholder="напр. Яворов" />
+      <label for="settlementSelect">Населено място</label>
+      <select id="settlementSelect"><option value="">Всички</option></select>
+      <label for="typeSelect">Вид училище</label>
+      <select id="typeSelect"><option value="">Всички</option></select>
+      <label for="projectsSelect">Проекти през текущата година</label>
+      <select id="projectsSelect">
+        <option value="">Без значение</option>
+        <option value="0">0</option>
+        <option value="1">Поне 1</option>
+        <option value="2">Поне 2</option>
+        <option value="3">Поне 3</option>
+      </select>
+      <label for="examBandSelect">Ниво по НВО БЕЛ 7</label>
+      <select id="examBandSelect">
+        <option value="">Всички</option>
+        <option value="low">Под 35 точки</option>
+        <option value="mid">35–49.99 точки</option>
+        <option value="high">50+ точки</option>
+      </select>
+      <button id="resetBtn">Изчисти филтрите</button>
+    </div>
+
+    <div class="panel">
+      <div class="stats">
+        <div class="stat"><div class="k">Показани училища</div><div class="v" id="shownCount">0</div></div>
+        <div class="stat"><div class="k">Средно НВО БЕЛ 7</div><div class="v" id="avgExam">—</div></div>
+        <div class="stat"><div class="k">Общо ученици</div><div class="v" id="sumStudents">—</div></div>
+        <div class="stat"><div class="k">Общо проекти</div><div class="v" id="sumProjects">0</div></div>
+      </div>
+      <div class="muted">Размерът на точката зависи от броя ученици, а цветът — от резултата по НВО БЕЛ 7.</div>
+    </div>
+
+    <div class="panel">
+      <div class="legend-item"><span class="dot" style="background:#ef4444;"></span> Под 35 точки</div>
+      <div class="legend-item"><span class="dot" style="background:#f59e0b;"></span> 35–49.99 точки</div>
+      <div class="legend-item"><span class="dot" style="background:#10b981;"></span> 50+ точки</div>
+    </div>
+
+    <div class="panel">
+      <div style="font-weight:600; margin-bottom:8px;">Списък</div>
+      <div class="muted">Кликни върху училище, за да се отвори pop-up на картата.</div>
+      <div class="results" id="resultsList"></div>
+    </div>
+  </aside>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const schools = [{"school_code": "200203", "school_name": "Частно средно езиково училище Д-р Мария Монтесори", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Частно", "funding_group": null, "students": 79, "ped_specialists": 23, "total_staff": 29, "student_teacher_ratio": 3.4, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 1, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 1, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 69.82, "exam_bel_7_mcq": 23.45, "exam_bel_7_open": 46.36, "location_basis": "zornitsa", "lat": 42.515757, "lon": 27.481715}, {"school_code": "200205", "school_name": "Основно училище Петко Рачев Славейков", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 508, "ped_specialists": 45, "total_staff": 58, "student_teacher_ratio": 11.3, "resource_teachers": 1, "speech_therapists": 1, "psychologists": 1, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 4, "n_projects": 2, "n_program_types": 1, "project_names": ["НП\"Заедно в изкуствата и спорта\"", "НП\"Иновации в действие\""], "exam_bel_7_total": 67.71, "exam_bel_7_mcq": 23.1, "exam_bel_7_open": 44.61, "location_basis": "center", "lat": 42.500047, "lon": 27.476155}, {"school_code": "200206", "school_name": "Основно училище Свети княз Борис І", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 535, "ped_specialists": 50, "total_staff": 63, "student_teacher_ratio": 10.7, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 1, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 69.51, "exam_bel_7_mcq": 24.26, "exam_bel_7_open": 45.25, "location_basis": "center", "lat": 42.49474, "lon": 27.468769}, {"school_code": "200207", "school_name": "Основно училище Любен Каравелов", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 665, "ped_specialists": 62, "total_staff": 78, "student_teacher_ratio": 10.7, "resource_teachers": 2, "speech_therapists": 1, "psychologists": 0, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 4, "n_projects": 5, "n_program_types": 3, "project_names": ["НП “България – образователни маршрути”", "Модул 3 “Културните", "държавните и научните институции като образователна среда”.", "„Заедно в науката", "спорта и изкуствата“", "Заедно в изкуствата и в спорта", "Националната програма „ Ученически олимпиади и състезания”", "Модул „Осигуряване на обучение на талантливи ученици за участие в ученическите олимпиади”", "СП ” Еразъм+” в категория Притежаващи ” Еразъм” акредитация( КА121)"], "exam_bel_7_total": 58.09, "exam_bel_7_mcq": 21.7, "exam_bel_7_open": 36.39, "location_basis": "center", "lat": 42.496406, "lon": 27.469484}, {"school_code": "200208", "school_name": "Основно училище Найден Геров", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 667, "ped_specialists": 64, "total_staff": 78, "student_teacher_ratio": 10.4, "resource_teachers": 2, "speech_therapists": 1, "psychologists": 1, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 4, "n_projects": 5, "n_program_types": 2, "project_names": ["BG-RRP-1.015 „УЧИЛИЩНА STEM СРЕДА“", "Информационни и комуникационни технологии (ИКТ) в системата на предучилищното и училищното образование", "НП „Безопасност на движението по пътищата“", "Обединени чрез култура", "наука и спорт: интеркултурно образование в действие", "Умения на фокус", "Модул Модул 2. Финансова грамотност"], "exam_bel_7_total": 61.03, "exam_bel_7_mcq": 22.06, "exam_bel_7_open": 38.97, "location_basis": "meden_rudnik", "lat": 42.448889, "lon": 27.419758}, {"school_code": "200209", "school_name": "Основно училище Антон Страшимиров", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 892, "ped_specialists": 77, "total_staff": 92, "student_teacher_ratio": 11.6, "resource_teachers": 1, "speech_therapists": 1, "psychologists": 0, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 3, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 70.2, "exam_bel_7_mcq": 24.58, "exam_bel_7_open": 45.63, "location_basis": "slaveykov", "lat": 42.518282, "lon": 27.460533}, {"school_code": "200210", "school_name": "Основно училище Свети Климент Охридски", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 439, "ped_specialists": 41, "total_staff": 52, "student_teacher_ratio": 10.7, "resource_teachers": 0, "speech_therapists": 1, "psychologists": 0, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 2, "n_projects": 11, "n_program_types": 5, "project_names": ["\"Успех за теб\"", "Занимания по интереси", "НП „Заедно в изкуствата и в спорта“", "НП „Иновативно училище“", "проект „Технологии и роботика“", "НП „ОПТИМИЗИРАНЕ НА ВЪТРЕШНАТА СТРУКТУРА НА ПЕРСОНАЛА\"", "НП „Профилактика и рехабилитация на педагогическите специалисти 2025“", "НП „Ученически олимпиади и състезания“", "Модул „Осигуряване на обучение на талантливи ученици за участие в ученическите олимпиади“", "Национална програма „България - образователни маршрути“", "Програма \"Бързи герои-112\"", "Проект за предоставяне на средства за физическа активност", "физическо възпитание", "спорт и спортно-туристическа дейност за 2025 г.", "Споразумение за сътрудничество с ОУ „Ататюрк“", "гр.Къркларели", "РТурция"], "exam_bel_7_total": 71.26, "exam_bel_7_mcq": 24.89, "exam_bel_7_open": 46.36, "location_basis": "izgrev", "lat": 42.525706, "lon": 27.489647}, {"school_code": "200211", "school_name": "Основно училище Георги Бенковски", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 625, "ped_specialists": 50, "total_staff": 61, "student_teacher_ratio": 12.5, "resource_teachers": 3, "speech_therapists": 1, "psychologists": 0, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 4, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 72.08, "exam_bel_7_mcq": 25.41, "exam_bel_7_open": 46.66, "location_basis": "zornitsa", "lat": 42.507234, "lon": 27.485067}, {"school_code": "200212", "school_name": "Основно училище Пейо Крачолов Яворов", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 598, "ped_specialists": 50, "total_staff": 61, "student_teacher_ratio": 12, "resource_teachers": 1, "speech_therapists": 1, "psychologists": 1, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 4, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 65.66, "exam_bel_7_mcq": 23.74, "exam_bel_7_open": 41.92, "location_basis": "lazur", "lat": 42.505531, "lon": 27.482031}, {"school_code": "200213", "school_name": "Основно училище Васил Априлов", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 638, "ped_specialists": 52, "total_staff": 64, "student_teacher_ratio": 12.3, "resource_teachers": 0, "speech_therapists": 1, "psychologists": 1, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 3, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 77.95, "exam_bel_7_mcq": 26.39, "exam_bel_7_open": 51.56, "location_basis": "center", "lat": 42.499579, "lon": 27.477764}, {"school_code": "200214", "school_name": "Основно училище Братя Миладинови", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 835, "ped_specialists": 77, "total_staff": 98, "student_teacher_ratio": 10.8, "resource_teachers": 3, "speech_therapists": 1, "psychologists": 3, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 7, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 66.44, "exam_bel_7_mcq": 23.45, "exam_bel_7_open": 42.99, "location_basis": "slaveykov", "lat": 42.518507, "lon": 27.456169}, {"school_code": "200215", "school_name": "Основно училище Елин Пелин", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 1040, "ped_specialists": 98, "total_staff": 121, "student_teacher_ratio": 10.6, "resource_teachers": 2, "speech_therapists": 2, "psychologists": 1, "counselors": 2, "assistant_teachers": 0, "mediators": 0, "support_staff": 7, "n_projects": 6, "n_program_types": 3, "project_names": ["\"Успех за теб\"", "Иновативен проект на ОУ „Елин Пелин“", "Бургас – „Дигитален свят“ – провеждане на обучение във ФУЧ в III", "IV", "V и VI клас.", "НП \"Заедно в изкуствата и в спорта\"", "Национална програма „Изграждане на училищна STEM среда“ – проект STEM“", "“Дигитален и STEAM свят“ по програма “Еразъм+”", "Ключова дейност 1 „Образователна мобилност за граждани“", "сектор „Училищно образование“ (KA122-SCH)", "„Програма за развитие на силните страни като път за ограничаване на насилието в началното училище\""], "exam_bel_7_total": 65.65, "exam_bel_7_mcq": 22.9, "exam_bel_7_open": 42.75, "location_basis": "meden_rudnik", "lat": 42.44204, "lon": 27.41774}, {"school_code": "200216", "school_name": "Обединено училище Васил Левски - кв. Горно Езерово", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "обединено", "funding": "Общинско", "funding_group": "5.0", "students": 385, "ped_specialists": 38, "total_staff": 51, "student_teacher_ratio": 10.1, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 1, "counselors": 0, "assistant_teachers": 0, "mediators": 4, "support_staff": 5, "n_projects": 6, "n_program_types": 2, "project_names": ["20. Национална програма „Заедно в изкуствата и в спорта“", "9. Национална програма „Иновации в действие“", "BG - RRP - 1.015-1359-C02 \"Училищна STEM среда в Обединено училище \"Васил Левски\" гр. Бургас", "BG05SFPR001-1.002-0008-C01 \"Шанс за бъдеще\"", "по програма „ОБРАЗОВАНИЕ“ 2021 – 2027", "процедура за предоставяне на безвъзмездна финансова помощ BG05SFPR001-1.002 „Достъп до образование за всяко дете“", "Проект BG05SFPR001-1.001-0001 „Успех за теб“", "Проект BG05SFPR001-1.003-0001 „Силен старт“"], "exam_bel_7_total": 7.03, "exam_bel_7_mcq": 6.97, "exam_bel_7_open": 0.06, "location_basis": "gorno_ezerovo", "lat": 42.470399, "lon": 27.38009}, {"school_code": "200217", "school_name": "Основно училище Христо Ботев - кв. Сарафово", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 355, "ped_specialists": 35, "total_staff": 43, "student_teacher_ratio": 10.1, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 1, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 1, "n_projects": 1, "n_program_types": 1, "project_names": ["Проект BG05SFPR001-1.001-0001 „Успех за теб“"], "exam_bel_7_total": 54.67, "exam_bel_7_mcq": 20.46, "exam_bel_7_open": 34.21, "location_basis": "sarafovo", "lat": 42.558367, "lon": 27.523112}, {"school_code": "200218", "school_name": "Основно училище Христо Ботев - кв. Победа", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": "5.0", "students": 582, "ped_specialists": 66, "total_staff": 91, "student_teacher_ratio": 8.8, "resource_teachers": 2, "speech_therapists": 0, "psychologists": 2, "counselors": 1, "assistant_teachers": 1, "mediators": 5, "support_staff": 11, "n_projects": 4, "n_program_types": 1, "project_names": ["\"Успех за теб\"", "Добрият избор", "Силен старт", "Утвърждаване на интеркултурното образование чрез наука", "култура и спорт"], "exam_bel_7_total": 8.2, "exam_bel_7_mcq": 6.67, "exam_bel_7_open": 1.53, "location_basis": "pobeda", "lat": 42.484333, "lon": 27.446879}, {"school_code": "200219", "school_name": "Основно училище Христо Ботев - кв. Долно Езерово", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 219, "ped_specialists": 26, "total_staff": 33, "student_teacher_ratio": 8.4, "resource_teachers": 1, "speech_therapists": 1, "psychologists": 1, "counselors": 0, "assistant_teachers": 1, "mediators": 0, "support_staff": 4, "n_projects": 9, "n_program_types": 2, "project_names": ["Изграждане на училищна STEM среда и високотехнологични оборудвани и свързани класни стаи (ВОСКС)", "НП \"Без свободен час\"", "НП \"Заедно в изкуствата и спорта\"", "НП \"Иновации в действие\"", "НП „ИКТ - Средства за Интернет свързаност”", "НП „Оптимизиране на вътрешната структура на персонала“", "Програма за изграждане и основен ремонт на спортни площадки и физкултурни салони в държавните и общинските училища за периода 2024 – 2027 г.", "Модул 3 „ Изграждане и основен ремонт на открити спортни площадки", "Проект BG05SFPR001-1.001-0001 « Успех за теб»", "Схема \"Училищен плод\" и схема \"Училищно мляко\""], "exam_bel_7_total": 55.04, "exam_bel_7_mcq": 18.28, "exam_bel_7_open": 36.76, "location_basis": "dolno_ezerovo", "lat": 42.505319, "lon": 27.351114}, {"school_code": "200220", "school_name": "Основно училище Васил Левски", "municipality": "БУРГАС", "settlement": "ГР.БЪЛГАРОВО", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 79, "ped_specialists": 13, "total_staff": 18, "student_teacher_ratio": 6.1, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 0, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 45.32, "exam_bel_7_mcq": 16, "exam_bel_7_open": 29.32, "location_basis": "balgarovo", "lat": 42.642129, "lon": 27.398475}, {"school_code": "200221", "school_name": "Средно училище Христо Ботев - кв. Черно море", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": "4.0", "students": 138, "ped_specialists": 19, "total_staff": 26, "student_teacher_ratio": 7.3, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 0, "assistant_teachers": 0, "mediators": 1, "support_staff": 1, "n_projects": 5, "n_program_types": 2, "project_names": ["Изграждане и основен ремонт на спортна площадки и физкултурни салони в държавни и общински училища", "Изграждане на училищна СТЕМ среда", "НП“ България- Образователни маршрути“.", "Осигуряване на съвременна", "сигурна и достъпна образователна среда", "Успех за теб"], "exam_bel_7_total": 25.94, "exam_bel_7_mcq": 15.12, "exam_bel_7_open": 10.81, "location_basis": "cherno_more", "lat": 42.407393, "lon": 27.467536}, {"school_code": "200222", "school_name": "Основно училище Иван Вазов - кв. Банево", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 90, "ped_specialists": 15, "total_staff": 20, "student_teacher_ratio": 6, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 0, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 51.92, "exam_bel_7_mcq": 22.38, "exam_bel_7_open": 29.54, "location_basis": "banevo", "lat": 42.578722, "lon": 27.400685}, {"school_code": "200223", "school_name": "Основно училище Христо Ботев - кв. Ветрен", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 125, "ped_specialists": 17, "total_staff": 23, "student_teacher_ratio": 7.4, "resource_teachers": 1, "speech_therapists": 0, "psychologists": 1, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 2, "n_projects": 1, "n_program_types": 1, "project_names": ["Проект \"Успех за теб\""], "exam_bel_7_total": 54.4, "exam_bel_7_mcq": 21.6, "exam_bel_7_open": 32.8, "location_basis": "vetren", "lat": 42.624422, "lon": 27.468105}, {"school_code": "200224", "school_name": "Основно училище Христо Ботев", "municipality": "БУРГАС", "settlement": "С.МАРИНКА", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": "1.0", "students": 85, "ped_specialists": 12, "total_staff": 19, "student_teacher_ratio": 7.1, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 0, "assistant_teachers": 0, "mediators": 1, "support_staff": 1, "n_projects": 6, "n_program_types": 3, "project_names": ["BG-RRP-1.015 \"Училищна STEM среда\"", "BG05SFPR001-1.001-0001 \"Успех за теб\"", "НП \"Заедно в изкуствата и спорта\"", "Проект за предоставяне на средства за подпомагане физическото възпитание и спорта на учениците за 2025 г.", "Схема за предоставяне на мляко и млечни продукти в учебните заведения - Схема \"Училищно мляко\"", "Схема за предоставяне на плодове и зеленчуци в учебните заведения - Схема \"Училищен плод\""], "exam_bel_7_total": 31.21, "exam_bel_7_mcq": 13.92, "exam_bel_7_open": 17.29, "location_basis": "marinka", "lat": 42.403478, "lon": 27.469017}, {"school_code": "200225", "school_name": "Основно училище Св. Св. Кирил и Методий", "municipality": "БУРГАС", "settlement": "С.РАВНЕЦ", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": "5.0", "students": 106, "ped_specialists": 14, "total_staff": 21, "student_teacher_ratio": 7.6, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 0, "assistant_teachers": 0, "mediators": 1, "support_staff": 1, "n_projects": 5, "n_program_types": 3, "project_names": ["\"Образование\"2021-2027 процедура BG05SFPR001-1.002 \"Достъп до образование за всяко дете\"", "Национална програма „Оптимизация на училищна мрежа“", "Проект BG-RRP-1.015 „Училищна STEM среда“", "Проект BGO5SFPR 001-1.001-0001 \"Успех за теб\"", "Схема \"Училищен плод\" и \"Училищно мляко\"финансирана от Държавен фонд \"Земеделие\""], "exam_bel_7_total": 21.94, "exam_bel_7_mcq": 12.75, "exam_bel_7_open": 9.19, "location_basis": "ravnets", "lat": 42.478849, "lon": 27.26742}, {"school_code": "200226", "school_name": "Средно училище Св. Климент Охридски - кв. Рудник", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": "5.0", "students": 228, "ped_specialists": 30, "total_staff": 43, "student_teacher_ratio": 7.6, "resource_teachers": 2, "speech_therapists": 1, "psychologists": 1, "counselors": 0, "assistant_teachers": 1, "mediators": 4, "support_staff": 9, "n_projects": 1, "n_program_types": 1, "project_names": ["Проект BG05SFPR001-1.001-0001 „УСПЕХ ЗА ТЕБ“"], "exam_bel_7_total": 26.31, "exam_bel_7_mcq": 15.29, "exam_bel_7_open": 11.02, "location_basis": "rudnik", "lat": 42.63842, "lon": 27.474625}, {"school_code": "200228", "school_name": "Средно училище Йордан Йовков", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": null, "students": 637, "ped_specialists": 65, "total_staff": 78, "student_teacher_ratio": 9.8, "resource_teachers": 4, "speech_therapists": 1, "psychologists": 2, "counselors": 0, "assistant_teachers": 1, "mediators": 0, "support_staff": 8, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 62.64, "exam_bel_7_mcq": 21.83, "exam_bel_7_open": 40.81, "location_basis": "izgrev", "lat": 42.517984, "lon": 27.484646}, {"school_code": "200229", "school_name": "Средно училище Епископ Константин Преславски", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": null, "students": 1108, "ped_specialists": 98, "total_staff": 113, "student_teacher_ratio": 11.3, "resource_teachers": 3, "speech_therapists": 1, "psychologists": 1, "counselors": 2, "assistant_teachers": 0, "mediators": 0, "support_staff": 7, "n_projects": 1, "n_program_types": 1, "project_names": ["Модернизиране на професионалното образование и обучение"], "exam_bel_7_total": 58.84, "exam_bel_7_mcq": 21.08, "exam_bel_7_open": 37.76, "location_basis": "slaveykov", "lat": 42.517761, "lon": 27.457169}, {"school_code": "200230", "school_name": "Средно училище Димчо Дебелянов", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": null, "students": 622, "ped_specialists": 60, "total_staff": 79, "student_teacher_ratio": 10.4, "resource_teachers": 3, "speech_therapists": 1, "psychologists": 2, "counselors": 1, "assistant_teachers": 1, "mediators": 0, "support_staff": 8, "n_projects": 2, "n_program_types": 2, "project_names": ["\" BG05SFPR001-3.001 „МОДЕРНИЗИРАНЕ НА ПРОФЕСИОНАЛНОТО ОБРАЗОВАНИЕ И ОБУЧЕНИЕ\"", "BG05SFPR001-1.001-0001 „Успех за теб“"], "exam_bel_7_total": 71.14, "exam_bel_7_mcq": 24.89, "exam_bel_7_open": 46.25, "location_basis": "slaveykov", "lat": 42.518629, "lon": 27.449348}, {"school_code": "200231", "school_name": "Средно училище Добри Чинтулов", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": null, "students": 388, "ped_specialists": 50, "total_staff": 58, "student_teacher_ratio": 7.8, "resource_teachers": 2, "speech_therapists": 0, "psychologists": 1, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 3, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 55.8, "exam_bel_7_mcq": 19.57, "exam_bel_7_open": 36.23, "location_basis": "izgrev", "lat": 42.52185, "lon": 27.482744}, {"school_code": "200232", "school_name": "Средно училище Константин Петканов", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": null, "students": 863, "ped_specialists": 90, "total_staff": 109, "student_teacher_ratio": 9.6, "resource_teachers": 3, "speech_therapists": 1, "psychologists": 2, "counselors": 0, "assistant_teachers": 1, "mediators": 0, "support_staff": 7, "n_projects": 1, "n_program_types": 1, "project_names": ["Изграждане на професионални компетенции и демократични ценности чрез европейски стажове за младите графични дизайнери и специалисти по логистика"], "exam_bel_7_total": 53.81, "exam_bel_7_mcq": 19.63, "exam_bel_7_open": 34.19, "location_basis": "meden_rudnik", "lat": 42.44583, "lon": 27.413423}, {"school_code": "200233", "school_name": "Средно училище Петко Росен", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": null, "students": 637, "ped_specialists": 69, "total_staff": 89, "student_teacher_ratio": 9.2, "resource_teachers": 2, "speech_therapists": 1, "psychologists": 2, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 6, "n_projects": 8, "n_program_types": 2, "project_names": ["Без свободен час", "България - образователни маршрути", "Заедно в изкуствата и спорта", "ИКТ в системата на предучилищното и училищното образование", "Модернизиране на професионалното образование и обучение", "Оптимизация на вътрешната структура на персонала", "Осигуряване на съвременна", "сигурна и достъпна образователна среда", "Успех за теб"], "exam_bel_7_total": 51.87, "exam_bel_7_mcq": 19.93, "exam_bel_7_open": 31.94, "location_basis": "meden_rudnik", "lat": 42.448363, "lon": 27.414984}, {"school_code": "200234", "school_name": "Средно училище Св. св. Кирил и Методий", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "средно", "funding": "Общинско", "funding_group": null, "students": 1091, "ped_specialists": 96, "total_staff": 112, "student_teacher_ratio": 11.4, "resource_teachers": 3, "speech_therapists": 1, "psychologists": 1, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 6, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 69.75, "exam_bel_7_mcq": 23.48, "exam_bel_7_open": 46.27, "location_basis": "center", "lat": 42.492089, "lon": 27.469291}, {"school_code": "200239", "school_name": "Профилирана природоматематическа гимназия Академик Никола Обрешков", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "профилирана гимназия", "funding": "Общинско", "funding_group": null, "students": 1031, "ped_specialists": 73, "total_staff": 87, "student_teacher_ratio": 14.1, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 1, "n_projects": 1, "n_program_types": 1, "project_names": ["Еразъм+"], "exam_bel_7_total": 89.04, "exam_bel_7_mcq": 29.99, "exam_bel_7_open": 59.05, "location_basis": "center", "lat": 42.497764, "lon": 27.470686}, {"school_code": "200240", "school_name": "Спортно училище Юрий Гагарин", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "специализирано", "school_type_detail": "спортно", "funding": "Държавно", "funding_group": null, "students": 360, "ped_specialists": 52, "total_staff": 61, "student_teacher_ratio": 6.9, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 1, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 44.17, "exam_bel_7_mcq": 16.77, "exam_bel_7_open": 27.4, "location_basis": "zornitsa", "lat": 42.513867, "lon": 27.485173}, {"school_code": "200241", "school_name": "Основно училище Александър Георгиев-Коджакафалията", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Общинско", "funding_group": null, "students": 438, "ped_specialists": 35, "total_staff": 45, "student_teacher_ratio": 12.5, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 1, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 1, "n_projects": 4, "n_program_types": 2, "project_names": ["ЕРАЗЪМ+ кд1", "Информационни и комуникационни технологии (ИКТ) в системата на предучилищното и училищното образование", "НП \"Без свободен час\"", "Училищна STEM среда"], "exam_bel_7_total": 83.47, "exam_bel_7_mcq": 28.85, "exam_bel_7_open": 54.62, "location_basis": "center", "lat": 42.492914, "lon": 27.469227}, {"school_code": "200259", "school_name": "Първо частно основно училище", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "неспециализирано", "school_type_detail": "основно", "funding": "Частно", "funding_group": null, "students": 38, "ped_specialists": 14, "total_staff": 17, "student_teacher_ratio": 2.7, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 0, "assistant_teachers": 0, "mediators": 0, "support_staff": 0, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 88.5, "exam_bel_7_mcq": 30.94, "exam_bel_7_open": 57.56, "location_basis": "center", "lat": 42.495487, "lon": 27.477071}, {"school_code": "2902103", "school_name": "Национално училище за музикално и сценично изкуство Проф. Панчо Владигеров", "municipality": "БУРГАС", "settlement": "ГР.БУРГАС", "school_type": "специализирано", "school_type_detail": "по изкуствата", "funding": "Държавно", "funding_group": null, "students": 576, "ped_specialists": 113, "total_staff": 131, "student_teacher_ratio": 5.1, "resource_teachers": 0, "speech_therapists": 0, "psychologists": 0, "counselors": 1, "assistant_teachers": 0, "mediators": 0, "support_staff": 1, "n_projects": 0, "n_program_types": 0, "project_names": [], "exam_bel_7_total": 61.18, "exam_bel_7_mcq": 20.65, "exam_bel_7_open": 40.53, "location_basis": "center", "lat": 42.497006, "lon": 27.47637}];
+    const settlements = ["ГР.БУРГАС", "ГР.БЪЛГАРОВО", "С.МАРИНКА", "С.РАВНЕЦ"];
+    const schoolTypes = ["неспециализирано", "специализирано"];
+
+    const map = L.map('map').setView([42.50, 27.47], 11);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const markersLayer = L.layerGroup().addTo(map);
+    const markerByCode = new Map();
+
+    const searchInput = document.getElementById('searchInput');
+    const settlementSelect = document.getElementById('settlementSelect');
+    const typeSelect = document.getElementById('typeSelect');
+    const projectsSelect = document.getElementById('projectsSelect');
+    const examBandSelect = document.getElementById('examBandSelect');
+    const resetBtn = document.getElementById('resetBtn');
+
+    const shownCount = document.getElementById('shownCount');
+    const avgExam = document.getElementById('avgExam');
+    const sumStudents = document.getElementById('sumStudents');
+    const sumProjects = document.getElementById('sumProjects');
+    const resultsList = document.getElementById('resultsList');
+
+    function addOptions(selectEl, values) {
+      values.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        selectEl.appendChild(opt);
+      });
+    }
+    addOptions(settlementSelect, settlements);
+    addOptions(typeSelect, schoolTypes);
+
+    function colorForExam(score) {
+      if (score < 35) return '#ef4444';
+      if (score < 50) return '#f59e0b';
+      return '#10b981';
+    }
+    function radiusForStudents(students) {
+      if (!students) return 4;
+      if (students < 120) return 4;
+      if (students < 300) return 5;
+      if (students < 700) return 6;
+      return 7;
+    }
+    function fmt(v) {
+      if (v === null || v === undefined || v === '') return '—';
+      return new Intl.NumberFormat('bg-BG', { maximumFractionDigits: 2 }).format(v);
+    }
+    function escapeHtml(str) {
+      return String(str).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
+    }
+    function buildPopup(s) {
+      const projects = (s.project_names && s.project_names.length)
+        ? s.project_names.map(p => `<span class="badge">${escapeHtml(p)}</span>`).join('')
+        : '<span class="muted">Няма налични имена на проекти</span>';
+      return `
+        <div class="popup-title">${escapeHtml(s.school_name)}</div>
+        <div><strong>Код НЕИСПУО:</strong> ${escapeHtml(s.school_code || '—')}</div>
+        <div><strong>Населено място:</strong> ${escapeHtml(s.settlement || '—')}</div>
+        <div><strong>Вид:</strong> ${escapeHtml(s.school_type || '—')}</div>
+        <div><strong>Детайлен вид:</strong> ${escapeHtml(s.school_type_detail || '—')}</div>
+
+        <div class="popup-section">
+          <div class="popup-section-title">Хора и капацитет</div>
+          <div><strong>Ученици:</strong> ${fmt(s.students)}</div>
+          <div><strong>Пед. специалисти:</strong> ${fmt(s.ped_specialists)}</div>
+          <div><strong>Общ персонал:</strong> ${fmt(s.total_staff)}</div>
+          <div><strong>Съотношение ученик/учител:</strong> ${fmt(s.student_teacher_ratio)}</div>
+          <div><strong>Ресурсни учители:</strong> ${fmt(s.resource_teachers)}</div>
+          <div><strong>Логопеди:</strong> ${fmt(s.speech_therapists)}</div>
+          <div><strong>Психолози:</strong> ${fmt(s.psychologists)}</div>
+          <div><strong>Пед. съветници:</strong> ${fmt(s.counselors)}</div>
+          <div><strong>Помощник-учители:</strong> ${fmt(s.assistant_teachers)}</div>
+          <div><strong>Медиатори:</strong> ${fmt(s.mediators)}</div>
+        </div>
+
+        <div class="popup-section">
+          <div class="popup-section-title">Проекти</div>
+          <div><strong>Брой проекти:</strong> ${fmt(s.n_projects)}</div>
+          <div><strong>Брой типове програми:</strong> ${fmt(s.n_program_types)}</div>
+          <div style="margin-top:6px;">${projects}</div>
+        </div>
+
+        <div class="popup-section">
+          <div class="popup-section-title">НВО БЕЛ 7. клас</div>
+          <div><strong>Общо точки:</strong> ${fmt(s.exam_bel_7_total)}</div>
+          <div><strong>Избираем отговор:</strong> ${fmt(s.exam_bel_7_mcq)}</div>
+          <div><strong>Свободен отговор:</strong> ${fmt(s.exam_bel_7_open)}</div>
+        </div>
+
+        <div class="popup-section muted">Поставено по квартал / населено място за по-реалистичен прототип.</div>
+      `;
+    }
+
+    function currentFilters() {
+      return {
+        q: searchInput.value.trim().toLowerCase(),
+        settlement: settlementSelect.value,
+        type: typeSelect.value,
+        projects: projectsSelect.value,
+        band: examBandSelect.value
+      };
+    }
+    function matchesBand(score, band) {
+      if (!band) return true;
+      if (band === 'low') return score < 35;
+      if (band === 'mid') return score >= 35 && score < 50;
+      if (band === 'high') return score >= 50;
+      return true;
+    }
+    function matchesFilters(s, f) {
+      if (f.q) {
+        const hay = `${s.school_name || ''} ${s.settlement || ''}`.toLowerCase();
+        if (!hay.includes(f.q)) return false;
+      }
+      if (f.settlement && s.settlement !== f.settlement) return false;
+      if (f.type && s.school_type !== f.type) return false;
+      if (f.projects !== '') {
+        const minProjects = Number(f.projects);
+        if ((s.n_projects || 0) < minProjects) return false;
+      }
+      if (!matchesBand(s.exam_bel_7_total, f.band)) return false;
+      return true;
+    }
+
+    function renderResultsList(items) {
+      resultsList.innerHTML = '';
+      const top = items.slice().sort((a,b) => b.exam_bel_7_total - a.exam_bel_7_total);
+      if (!top.length) {
+        resultsList.innerHTML = '<div class="muted">Няма училища по текущите филтри.</div>';
+        return;
+      }
+      top.forEach(s => {
+        const el = document.createElement('div');
+        el.className = 'result-item';
+        el.innerHTML = `
+          <div class="result-title">${escapeHtml(s.school_name)}</div>
+          <div class="result-meta">${escapeHtml(s.settlement || '—')} · НВО БЕЛ 7: ${fmt(s.exam_bel_7_total)}</div>
+        `;
+        el.addEventListener('click', () => {
+          const key = s.school_code || s.school_name;
+          const marker = markerByCode.get(key);
+          if (marker) {
+            map.setView(marker.getLatLng(), 13);
+            marker.openPopup();
+          }
+        });
+        resultsList.appendChild(el);
+      });
+    }
+
+    function render() {
+      const f = currentFilters();
+      const filtered = schools.filter(s => matchesFilters(s, f));
+      markersLayer.clearLayers();
+      markerByCode.clear();
+
+      let totalStudents = 0, totalProjects = 0, examSum = 0;
+
+      filtered.forEach(s => {
+        if (typeof s.students === 'number') totalStudents += s.students;
+        if (typeof s.n_projects === 'number') totalProjects += s.n_projects;
+        examSum += s.exam_bel_7_total;
+
+        const marker = L.circleMarker([s.lat, s.lon], {
+          radius: radiusForStudents(s.students),
+          fillColor: colorForExam(s.exam_bel_7_total),
+          color: '#ffffff',
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.86
+        });
+        marker.bindPopup(buildPopup(s));
+        marker.addTo(markersLayer);
+        markerByCode.set(s.school_code || s.school_name, marker);
+      });
+
+      shownCount.textContent = new Intl.NumberFormat('bg-BG').format(filtered.length);
+      sumStudents.textContent = filtered.length ? new Intl.NumberFormat('bg-BG').format(totalStudents) : '—';
+      sumProjects.textContent = new Intl.NumberFormat('bg-BG').format(totalProjects);
+      avgExam.textContent = filtered.length ? new Intl.NumberFormat('bg-BG', { maximumFractionDigits:1 }).format(examSum / filtered.length) : '—';
+
+      renderResultsList(filtered);
+
+      if (filtered.length > 0) {
+        const bounds = L.latLngBounds(filtered.map(s => [s.lat, s.lon]));
+        map.fitBounds(bounds.pad(0.12));
+      } else {
+        map.setView([42.50, 27.47], 11);
+      }
+    }
+
+    [searchInput, settlementSelect, typeSelect, projectsSelect, examBandSelect].forEach(el => {
+      el.addEventListener('input', render);
+      el.addEventListener('change', render);
+    });
+    resetBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      settlementSelect.value = '';
+      typeSelect.value = '';
+      projectsSelect.value = '';
+      examBandSelect.value = '';
+      render();
+    });
+    render();
+  </script>
+</body>
+</html>
